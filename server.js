@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const { Resend } = require("resend");
+const nodemailer = require("nodemailer");
 
 const app = express();
 
@@ -10,16 +10,56 @@ app.use(cors());
 app.use(express.json());
 
 // =====================
-// HEALTH CHECK
+// HEALTH CHECK ROUTE
 // =====================
 app.get("/", (req, res) => {
   res.send("Lost & Found Server is running 🚀");
 });
 
 // =====================
-// RESEND SETUP
+// GMAIL TRANSPORTER (STABLE VERSION FOR RENDER)
 // =====================
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // SSL (more stable than 587 on cloud servers)
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS, // Gmail App Password ONLY
+  },
+  pool: true,
+  maxConnections: 1,
+  maxMessages: 5,
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 15000,
+});
+
+// Verify connection
+transporter.verify((error) => {
+  if (error) {
+    console.log("❌ Email server error:", error);
+  } else {
+    console.log("✅ Email server ready");
+  }
+});
+
+// =====================
+// RETRY EMAIL FUNCTION
+// =====================
+async function sendEmail(mailOptions) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await transporter.sendMail(mailOptions);
+    } catch (err) {
+      console.log(`⚠ Email attempt ${i + 1} failed`);
+
+      if (i === 2) throw err;
+
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+}
 
 // =====================
 // REPORT ENDPOINT
@@ -37,8 +77,8 @@ app.post("/report", async (req, res) => {
 
     console.log("📩 New report received:", req.body);
 
-    const result = await resend.emails.send({
-      from: "Lost & Found <onboarding@resend.dev>",
+    await sendEmail({
+      from: `"Lost & Found System" <${process.env.EMAIL_USER}>`,
       to: [
         "adrianvesmin2@gmail.com",
         "macazo.386667@novaliches.sti.edu.ph",
@@ -53,24 +93,29 @@ app.post("/report", async (req, res) => {
         "tubal.384863@novaliches.sti.edu.ph",
         "aralar.388650@novaliches.sti.edu.ph",
         "esmeres.385881@novaliches.sti.edu.ph",
-        "gabilan.415071@novaliches.sti.edu.ph"
+        "gabilan.415071@novaliches.sti.edu.ph",
       ],
       subject: "🚨 New Lost & Found Report",
       html: `
-        <h2>New Lost & Found Report</h2>
-        <p><b>Name:</b> ${name}</p>
-        <p><b>Location:</b> ${location}</p>
-        <p><b>Description:</b> ${description}</p>
+        <div style="font-family: Arial; padding: 20px;">
+          <h2 style="color:#2b6cb0;">New Lost & Found Report</h2>
+          <p><b>Name:</b> ${name}</p>
+          <p><b>Location:</b> ${location}</p>
+          <p><b>Description:</b> ${description}</p>
+          <hr>
+          <p style="font-size:12px;color:gray;">
+            Automated Notification from Lost & Found System
+          </p>
+        </div>
       `,
     });
 
-    console.log("✅ Email result:", result);
+    console.log("✅ Email sent successfully");
 
     res.status(200).json({
       success: true,
-      message: "Report sent successfully",
+      message: "Report received and email sent",
     });
-
   } catch (error) {
     console.error("❌ Email error:", error);
 
