@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
 const app = express();
 
@@ -10,37 +10,16 @@ app.use(cors());
 app.use(express.json());
 
 // =====================
-// HEALTH CHECK ROUTE
+// HEALTH CHECK
 // =====================
 app.get("/", (req, res) => {
   res.send("Lost & Found Server is running 🚀");
 });
 
 // =====================
-// EMAIL TRANSPORTER
+// RESEND SETUP
 // =====================
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // use TLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  family: 4 // FORCE IPv4
-});
-
-// Verify email connection
-transporter.verify((error) => {
-  if (error) {
-    console.log("❌ Email server error:", error);
-  } else {
-    console.log("✅ Email server ready");
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // =====================
 // REPORT ENDPOINT
@@ -52,14 +31,14 @@ app.post("/report", async (req, res) => {
     if (!name || !location || !description) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields"
+        message: "Missing required fields",
       });
     }
 
     console.log("📩 New report received:", req.body);
 
-    await transporter.sendMail({
-      from: `"Lost & Found System" <${process.env.EMAIL_USER || "aretralostnfoundta@gmail.com"}>`,
+    const result = await resend.emails.send({
+      from: "Lost & Found <onboarding@resend.dev>",
       to: [
         "adrianvesmin2@gmail.com",
         "macazo.386667@novaliches.sti.edu.ph",
@@ -78,24 +57,18 @@ app.post("/report", async (req, res) => {
       ],
       subject: "🚨 New Lost & Found Report",
       html: `
-        <div style="font-family: Arial; padding: 20px;">
-          <h2 style="color:#2b6cb0;">New Lost & Found Report</h2>
-          <p><b>Name:</b> ${name}</p>
-          <p><b>Location:</b> ${location}</p>
-          <p><b>Description:</b> ${description}</p>
-          <hr>
-          <p style="font-size:12px;color:gray;">
-            Automated Notification from Lost & Found System
-          </p>
-        </div>
-      `
+        <h2>New Lost & Found Report</h2>
+        <p><b>Name:</b> ${name}</p>
+        <p><b>Location:</b> ${location}</p>
+        <p><b>Description:</b> ${description}</p>
+      `,
     });
 
-    console.log("✅ Email sent successfully");
+    console.log("✅ Email result:", result);
 
     res.status(200).json({
       success: true,
-      message: "Report received and email sent"
+      message: "Report sent successfully",
     });
 
   } catch (error) {
@@ -103,7 +76,7 @@ app.post("/report", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to send email"
+      message: "Failed to send email",
     });
   }
 });
