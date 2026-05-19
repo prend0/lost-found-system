@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
@@ -8,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // =====================
-// BASIC TEST ROUTE
+// HEALTH CHECK ROUTE
 // =====================
 app.get("/", (req, res) => {
   res.send("Lost & Found Server is running 🚀");
@@ -18,14 +20,20 @@ app.get("/", (req, res) => {
 // EMAIL TRANSPORTER
 // =====================
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // use TLS
   auth: {
-    user: "aretralostnfoundta@gmail.com",
-    pass: "crdu rkma gwjt jvbd" // App Password (DO NOT use normal password)
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+  family: 4 // FORCE IPv4
 });
 
-// Verify email connection on startup
+// Verify email connection
 transporter.verify((error) => {
   if (error) {
     console.log("❌ Email server error:", error);
@@ -41,7 +49,6 @@ app.post("/report", async (req, res) => {
   try {
     const { name, location, description } = req.body;
 
-    // Validate input
     if (!name || !location || !description) {
       return res.status(400).json({
         success: false,
@@ -51,9 +58,8 @@ app.post("/report", async (req, res) => {
 
     console.log("📩 New report received:", req.body);
 
-    // Send email
     await transporter.sendMail({
-      from: `"Lost & Found System" <aretralostnfoundta@gmail.com>`,
+      from: `"Lost & Found System" <${process.env.EMAIL_USER || "aretralostnfoundta@gmail.com"}>`,
       to: [
         "adrianvesmin2@gmail.com",
         "macazo.386667@novaliches.sti.edu.ph",
@@ -87,15 +93,15 @@ app.post("/report", async (req, res) => {
 
     console.log("✅ Email sent successfully");
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Report received and email sent"
     });
 
   } catch (error) {
-    console.error("❌ Error sending email:", error);
+    console.error("❌ Email error:", error);
 
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: "Failed to send email"
     });
@@ -105,7 +111,7 @@ app.post("/report", async (req, res) => {
 // =====================
 // START SERVER
 // =====================
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
